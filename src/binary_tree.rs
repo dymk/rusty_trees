@@ -1,49 +1,97 @@
 use std::collections::VecDeque;
 
-struct Node<T> {
+pub struct Node<T> {
     elem: T,
     children: Vec<Node<T>>,
 }
 
-struct NodeIterMut<'a, T: 'a> {
+struct NodeIterMut<'a, T> {
     elem: Option<&'a mut T>,
-    children: VecDeque<&'a mut Node<T>>,
+    children: Option<&'a mut [Node<T>]>,
 }
 
-enum State<'a, T: 'a> {
-    Elem(&'a mut T),
-    Node(&'a mut Node<T>),
+struct NodeIter<'a, T> {
+    elem: Option<&'a T>,
+    children: Option<&'a [Node<T>]>,
 }
 
 pub struct IterMut<'a, T: 'a>(VecDeque<NodeIterMut<'a, T>>);
+pub struct Iter<'a, T: 'a>(VecDeque<NodeIter<'a, T>>);
 
 impl<T> Node<T> {
     pub fn iter_mut(&mut self) -> IterMut<T> {
         let mut deque = VecDeque::new();
-        deque.push_front(self.iter_state());
+        deque.push_front(self.node_iter_mut());
         IterMut(deque)
     }
-}
 
-impl<T> Node<T> {
-    fn iter_state(&mut self) -> NodeIterMut<T> {
+    pub fn iter(&self) -> Iter<T> {
+        let mut deque = VecDeque::new();
+        deque.push_front(self.node_iter());
+        Iter(deque)
+    }
+
+    fn node_iter_mut(&mut self) -> NodeIterMut<T> {
         NodeIterMut {
             elem: Some(&mut self.elem),
-            children: self.children.iter_mut().collect(),
+            children: Some(&mut self.children[..]),
+        }
+    }
+
+    fn node_iter(&self) -> NodeIter<T> {
+        NodeIter {
+            elem: Some(&self.elem),
+            children: Some(&self.children[..]),
         }
     }
 }
 
+enum StateMut<'a, T: 'a> {
+    Elem(&'a mut T),
+    Node(&'a mut Node<T>),
+}
+
+enum State<'a, T: 'a> {
+    Elem(&'a T),
+    Node(&'a Node<T>),
+}
+
 impl<'a, T> Iterator for NodeIterMut<'a, T> {
+    type Item = StateMut<'a, T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.elem.take() {
+            Some(node) => Some(StateMut::Elem(node)),
+            None => {
+                let children = self.children.take().unwrap();
+                match children.split_first_mut() {
+                    Some((head, rest)) => {
+                        self.children = Some(rest);
+                        Some(StateMut::Node(head))
+                    }
+                    None => None,
+                }
+            }
+        }
+    }
+}
+
+impl<'a, T> Iterator for NodeIter<'a, T> {
     type Item = State<'a, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.elem.take() {
             Some(node) => Some(State::Elem(node)),
-            None => match self.children.pop_front() {
-                Some(node) => Some(State::Node(node)),
-                None => None,
-            },
+            None => {
+                let children = self.children.take().unwrap();
+                match children.split_first() {
+                    Some((head, rest)) => {
+                        self.children = Some(rest);
+                        Some(State::Node(head))
+                    }
+                    None => None,
+                }
+            }
         }
     }
 }
@@ -53,8 +101,25 @@ impl<'a, T> Iterator for IterMut<'a, T> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.0.front_mut().and_then(|node_it| node_it.next()) {
+                Some(StateMut::Elem(elem)) => return Some(elem),
+                Some(StateMut::Node(node)) => self.0.push_front(node.node_iter_mut()),
+                None => {
+                    if let None = self.0.pop_front() {
+                        return None;
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl<'a, T> Iterator for Iter<'a, T> {
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.0.front_mut().and_then(|node_it| node_it.next()) {
                 Some(State::Elem(elem)) => return Some(elem),
-                Some(State::Node(node)) => self.0.push_front(node.iter_state()),
+                Some(State::Node(node)) => self.0.push_front(node.node_iter()),
                 None => {
                     if let None = self.0.pop_front() {
                         return None;
@@ -67,7 +132,7 @@ impl<'a, T> Iterator for IterMut<'a, T> {
 
 #[cfg(test)]
 mod test {
-    use itertools::Itertools;
+    use itertools::{assert_equal, Itertools};
 
     use super::Node;
 
@@ -91,6 +156,6 @@ mod test {
             *value += 1;
         });
 
-        assert_eq!(vec![2, 3, 4], tree.iter_mut().map(|v| *v).collect_vec());
+        assert_equal(vec![2, 3, 4].iter(), tree.iter());
     }
 }

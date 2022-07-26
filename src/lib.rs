@@ -1,54 +1,41 @@
-use std::marker::PhantomData;
-
-// use self::{tree_iterator::TreeIterator, tree_iterator_mut::TreeIteratorMut};
-use self::{tree_iterator::TreeIterator};
-
-pub mod file_tree;
-mod tree_iterator;
-mod tree_iterator_mut;
 mod binary_tree;
+pub mod file_tree;
+mod iter;
+mod node_path;
+mod trie;
+#[macro_use]
+mod macro_impl;
 
-pub trait NodePath {
-    type Component;
-    fn from_components(components: &Vec<&Self::Component>) -> Self;
-    fn to_components(&self) -> Box<&dyn Iterator<Item = Self::Component>>;
-}
+pub use node_path::{IntoComponents, NodePath};
+pub use trie::Trie;
 
-pub struct InteriorNode<'a, P, T>
-where
-    P: NodePath,
-{
-    component: P::Component,
-    value: Option<T>,
-    children: Vec<Tree<'a, P, T>>,
-    phantom: PhantomData<&'a T>,
-}
-pub struct LeafNode<P, T>
-where
-    P: NodePath,
-{
-    component: P::Component,
-    value: Option<T>,
-}
+#[cfg(test)]
+mod test {
+    use std::fmt::Debug;
 
-pub enum Tree<'a, P, T>
-where
-    P: NodePath,
-{
-    Interior(InteriorNode<'a, P, T>),
-    Leaf(LeafNode<P, T>),
-}
+    use itertools::assert_equal;
 
-impl<'a, P, V> Tree<'a, P, V>
-where
-    P: NodePath,
-{
-    fn iter(&self) -> impl Iterator<Item = (P, Option<&V>)> + '_ {
-        TreeIterator::new(self)
+    use crate::{NodePath, Trie};
+
+    #[test]
+    fn test_works() {
+        let trie = trie![
+            "do", 1;
+            trie!['g', 2],
+            trie!["ts", 3],
+        ];
+
+        println!("trie:\n{:?}", trie);
+        assert_trie_iter(vec![("do", 1), ("dog", 2), ("dots", 3)], &trie);
+        assert_eq!(Some(&3), trie.get("dots"));
     }
-    // fn iter_mut(&'a mut self) -> impl Iterator<Item = (P, &'a mut Option<V>)> + '_ {
-    //     TreeIteratorMut::new(self)
-    // }
+
+    fn assert_trie_iter<P1, P2, V>(expect: Vec<(P1, V)>, trie: &Trie<P2, V>)
+    where
+        P1: Into<P2> + Copy,
+        P2: NodePath + Eq + Debug,
+        V: Eq + Debug,
+    {
+        assert_equal(expect.iter().map(|(c, i)| ((*c).into(), i)), trie.iter());
+    }
 }
-
-
