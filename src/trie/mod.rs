@@ -1,6 +1,7 @@
-use std::{fmt::Debug, process::Child, thread::current};
+use std::fmt::Debug;
 
-use crate::{iter::Iter, node_path::IntoComponents, NodePath};
+use crate::{iter::Iter, NodePath};
+pub mod ctors;
 
 trait TrieTrait {
     type PathType: NodePath;
@@ -29,33 +30,6 @@ impl<P, V> Trie<P, V>
 where
     P: NodePath,
 {
-    pub fn from_component<C>(component: C) -> Self
-    where
-        C: IntoComponents<P>,
-    {
-        Self::from_components_vec(component.into_components(), None, vec![])
-    }
-
-    pub fn from_component_val<C>(component: C, value: V) -> Self
-    where
-        C: IntoComponents<P>,
-    {
-        Self::from_components_vec(component.into_components(), Some(value), vec![])
-    }
-    pub fn from_component_val_children<C>(component: C, value: V, children: Vec<Trie<P, V>>) -> Self
-    where
-        C: IntoComponents<P>,
-    {
-        Self::from_components_vec(component.into_components(), Some(value), children)
-    }
-
-    pub fn from_component_children<C>(component: C, children: Vec<Trie<P, V>>) -> Self
-    where
-        C: IntoComponents<P>,
-    {
-        Self::from_components_vec(component.into_components(), None, children)
-    }
-
     pub fn iter(&self) -> Iter<P, V> {
         Iter::new(self)
     }
@@ -98,44 +72,6 @@ where
         current_node.and_then(|node| node.value.as_ref())
     }
 
-    fn from_components_vec(
-        mut components: Vec<P::Component>,
-        value: Option<V>,
-        children: Vec<Trie<P, V>>,
-    ) -> Trie<P, V> {
-        components.reverse();
-        Self::from_components_vec_impl(components, value, children)
-    }
-
-    fn from_components_vec_impl(
-        mut components_rev: Vec<P::Component>,
-        value: Option<V>,
-        children: Vec<Trie<P, V>>,
-    ) -> Trie<P, V> {
-        if components_rev.is_empty() {
-            panic!();
-        }
-
-        let component = components_rev.pop().unwrap();
-        if components_rev.is_empty() {
-            Trie {
-                component,
-                value,
-                children,
-            }
-        } else {
-            Trie {
-                component,
-                value: None,
-                children: vec![Self::from_components_vec_impl(
-                    components_rev,
-                    value,
-                    children,
-                )],
-            }
-        }
-    }
-
     // fn iter_mut(&'a mut self) -> impl Iterator<Item = (P, &'a mut Option<V>)> + '_ {
     //     TreeIteratorMut::new(self)
     // }
@@ -174,5 +110,36 @@ where
             Self::fmt_impl(ident + 2, child, f)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::fmt::Debug;
+
+    use itertools::assert_equal;
+
+    use crate::{NodePath, Trie};
+
+    #[test]
+    fn test_works() {
+        let trie = trie![
+            "do", 1;
+            trie!['g', 2],
+            trie!["ts", 3],
+        ];
+
+        // println!("trie:\n{:?}", trie);
+        assert_trie_iter(vec![("do", 1), ("dog", 2), ("dots", 3)], &trie);
+        assert_eq!(Some(&3), trie.get("dots"));
+    }
+
+    fn assert_trie_iter<P1, P2, V>(expect: Vec<(P1, V)>, trie: &Trie<P2, V>)
+    where
+        P1: Into<P2> + Copy,
+        P2: NodePath + Eq + Debug,
+        V: Eq + Debug,
+    {
+        assert_equal(expect.iter().map(|(c, i)| ((*c).into(), i)), trie.iter());
     }
 }
