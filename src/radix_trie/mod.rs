@@ -1,36 +1,10 @@
 use std::{borrow::Borrow, mem};
 
+use self::key_path::{Path, PathRefType};
+
 mod debug_impl;
-
-/**
- * Trait that the key for a RadixTrie must implement
- * `Ref` is the "reference" type of the key, for String this would be &str,
- * for e.g. PathBuf this would be Path
- */
-pub trait Path: Borrow<Self::Ref> {
-    type Ref: PathRefType<Self> + ?Sized;
-}
-
-/**
- * Trait that the key's Ref type must implement.
- * All operations are performed on references to the keys within the trie,
- * and not the owned values themselves.
- */
-pub trait PathRefType<Owned: ?Sized> {
-    /**
-     * Convert the reference to its Owned type (likely by clone / copy)
-     */
-    fn to_owned(&self) -> Owned;
-    /**
-     * Is the key empty?
-     */
-    fn is_empty(&self) -> bool;
-    /**
-     * For keys `a` and `b`, return the common prefix between the two, and the
-     * remaining parts of the keys that remain
-     */
-    fn prefix<'a>(a: &'a Self, b: &'a Self) -> (&'a Self, &'a Self, &'a Self);
-}
+mod key_path;
+mod key_path_string_impl;
 
 /**
  * A RadixTrie consists of a list of nodes, which have key paths that
@@ -187,30 +161,6 @@ where
         for node in &self.nodes {
             node.trie.check_nodes_prefix_invariant();
         }
-    }
-}
-
-/* Common key type - a String / &str */
-impl Path for String {
-    type Ref = str;
-}
-
-impl PathRefType<String> for str {
-    fn to_owned(&self) -> String {
-        ToOwned::to_owned(self)
-    }
-
-    fn is_empty(&self) -> bool {
-        self.is_empty()
-    }
-
-    fn prefix<'a>(a: &'a str, b: &'a str) -> (&'a str, &'a str, &'a str) {
-        let prefix_len = a
-            .chars()
-            .zip(b.chars())
-            .take_while(|(ac, bc)| ac == bc)
-            .count();
-        (&a[..prefix_len], &a[prefix_len..], &b[prefix_len..])
     }
 }
 
