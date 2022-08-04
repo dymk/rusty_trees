@@ -1,2 +1,2 @@
 // mod trie;
-mod radix_trie;
+pub mod radix_trie;
