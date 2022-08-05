@@ -7,6 +7,7 @@ use std::borrow::Borrow;
  */
 pub trait Path: Borrow<Self::Ref> {
     type Ref: PathRefType<Self> + ?Sized;
+    fn concat(self, other: Self) -> Self;
 }
 
 /**

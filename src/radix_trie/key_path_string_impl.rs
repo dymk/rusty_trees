@@ -3,6 +3,10 @@ use super::key_path::{Path, PathRefType};
 /* Common key type - a String / &str */
 impl Path for String {
     type Ref = str;
+
+    fn concat(self, other: Self) -> Self {
+        self + &other
+    }
 }
 
 impl PathRefType<String> for str {
