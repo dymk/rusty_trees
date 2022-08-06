@@ -1,12 +1,12 @@
 use std::{borrow::Borrow, mem};
 
 mod debug_impl;
-mod iter;
+pub mod iter;
 mod iter_mut;
 mod key_path;
 mod key_path_string_impl;
 
-pub use self::{iter::Iter, iter_mut::IterMut};
+use self::{iter::Iter, iter_mut::IterMut};
 pub use key_path::{Path, PathRef};
 
 /// Implementation of a Radix Trie (also known as a Radix Tree, or

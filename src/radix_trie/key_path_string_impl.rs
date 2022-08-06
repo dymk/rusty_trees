@@ -9,10 +9,6 @@ impl Path for String {
     fn concat(self, other: Self) -> Self {
         self + &other
     }
-
-    fn empty() -> Self {
-        "".into()
-    }
 }
 
 impl PathRef<String> for str {

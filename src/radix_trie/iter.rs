@@ -2,6 +2,10 @@ use crate::radix_trie::{Path, PathRef, RadixTrie};
 
 use super::Node;
 
+/// Iterator over a [RadixTrie]
+///
+/// Yielded items are a tuple of (P, &V), where
+/// P is the path type, and V is the value type
 pub struct Iter<'a, P, V>(Vec<IterState<'a, P, V>>)
 where
     P: Path;
