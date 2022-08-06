@@ -1,8 +1,14 @@
 use std::{borrow::Borrow, mem};
 
-use self::key_path::{Path, PathRefType};
+use self::{
+    iter::Iter,
+    iter_mut::IterMut,
+    key_path::{Path, PathRef},
+};
 
 mod debug_impl;
+mod iter;
+mod iter_mut;
 mod key_path;
 mod key_path_string_impl;
 
@@ -15,7 +21,7 @@ pub struct RadixTrie<P, V> {
     nodes: Vec<Node<P, V>>,
 }
 
-struct Node<P, V> {
+pub(self) struct Node<P, V> {
     path: P,
     trie: RadixTrie<P, V>,
 }
@@ -82,6 +88,14 @@ where
                 removed_value: value,
             } => value,
         }
+    }
+
+    pub fn iter(&self) -> Iter<P, V> {
+        Iter::new(self)
+    }
+
+    pub fn iter_mut(&mut self) -> IterMut<P, V> {
+        IterMut::new(self)
     }
 
     fn get_impl(&self, path: &P::Ref) -> Option<&V> {

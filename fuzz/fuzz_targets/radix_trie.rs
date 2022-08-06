@@ -9,7 +9,7 @@ macro_rules! check_same {
         let a = $trie.$($lambda)*;
         let b = $truth.$($lambda)*;
         if a != b {
-            panic!("{}: {:?} != {:?}", $name, a, b);
+            panic!("method {} failed: {:?} != {:?}", $name, a, b);
         }
     };
 }
@@ -21,7 +21,7 @@ fuzz_target!(|data: &[u8]| {
             return;
         }
 
-        let mut trie: RadixTrie<String, ()> = RadixTrie::default();
+        let mut trie = RadixTrie::new();
         let mut truth = HashMap::new();
 
         for line in data.lines() {
@@ -32,7 +32,8 @@ fuzz_target!(|data: &[u8]| {
             let rest = &line[2..];
             match &line[..2] {
                 "i:" => {
-                    check_same!(trie, truth, "insert", insert(rest.to_owned(), ()));
+                    let (param, rest) = get_param(rest).unwrap_or((0, rest));
+                    check_same!(trie, truth, "insert", insert(rest.to_owned(), param));
                 }
                 "g:" => {
                     check_same!(trie, truth, "get_ref", get(rest));
@@ -48,5 +49,25 @@ fuzz_target!(|data: &[u8]| {
                 }
             }
         }
+
+        let mut iter_truth = HashMap::new();
+        for (path, value) in trie.iter() {
+            if let Some(old_value) = iter_truth.insert(path.clone(), *value) {
+                panic!(
+                    "iterator gave duplicate path: {} / {} / {}",
+                    path, value, old_value
+                );
+            }
+        }
+        if !iter_truth.eq(&truth) {
+            panic!("iterators not equal: {:?} / {:?}", iter_truth, truth);
+        }
+    }
+
+    fn get_param(line: &str) -> Option<(usize, &str)> {
+        let idx = line.find(",")?;
+        let (line, num) = line.split_at(idx);
+        let num = num[1..].parse().ok()?;
+        Some((num, line))
     }
 });

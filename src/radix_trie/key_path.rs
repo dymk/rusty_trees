@@ -6,8 +6,9 @@ use std::borrow::Borrow;
  * for e.g. PathBuf this would be Path
  */
 pub trait Path: Borrow<Self::Ref> {
-    type Ref: PathRefType<Self> + ?Sized;
+    type Ref: PathRef<Self> + ?Sized;
     fn concat(self, other: Self) -> Self;
+    fn empty() -> Self;
 }
 
 /**
@@ -15,11 +16,7 @@ pub trait Path: Borrow<Self::Ref> {
  * All operations are performed on references to the keys within the trie,
  * and not the owned values themselves.
  */
-pub trait PathRefType<Owned: ?Sized> {
-    /**
-     * Convert the reference to its Owned type (likely by clone / copy)
-     */
-    fn to_owned(&self) -> Owned;
+pub trait PathRef<Path: ?Sized>: ToOwned<Owned = Path> {
     /**
      * Is the key empty?
      */
@@ -29,4 +26,8 @@ pub trait PathRefType<Owned: ?Sized> {
      * remaining parts of the keys that remain
      */
     fn prefix<'a>(a: &'a Self, b: &'a Self) -> (&'a Self, &'a Self, &'a Self);
+    /**
+     * Concatenate an iterator of PathRef into a Path
+     */
+    fn concat(iter: &mut dyn Iterator<Item = &Self>) -> Path;
 }
