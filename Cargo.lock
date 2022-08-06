@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tries"
+name = "rusty_trees"
 version = "0.1.0"
 dependencies = [
  "itertools",

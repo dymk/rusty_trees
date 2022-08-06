@@ -1,23 +1,26 @@
 use std::{borrow::Borrow, mem};
 
-use self::{
-    iter::Iter,
-    iter_mut::IterMut,
-    key_path::{Path, PathRef},
-};
-
 mod debug_impl;
 mod iter;
 mod iter_mut;
 mod key_path;
 mod key_path_string_impl;
 
-/**
- * A RadixTrie consists of a list of nodes, which have key paths that
- * share no common prefixes amongst themselves.
- */
+pub use self::{iter::Iter, iter_mut::IterMut};
+pub use key_path::{Path, PathRef};
+
+/// Implementation of a Radix Trie (also known as a Radix Tree, or
+/// Compressed Prefix Trie).
+///
+/// <https://en.wikipedia.org/wiki/Radix_tree>
 pub struct RadixTrie<P, V> {
+    // Interior nodes may have an optional value. An invariant that must be
+    // held is that leaf nodes _must_ contain a value (see
+    // `check_leaf_node_some_invariant`).
     value: Option<V>,
+
+    // List of child nodes. The path of a node is computed by concatenating
+    // all the `path`s starting from the root node to this node.
     nodes: Vec<Node<P, V>>,
 }
 
@@ -27,6 +30,7 @@ pub(self) struct Node<P, V> {
 }
 
 impl<P, V> RadixTrie<P, V> {
+    /// Create an empty trie
     pub fn new() -> RadixTrie<P, V> {
         Self::with_value_and_capacity(None, 0)
     }
@@ -53,6 +57,8 @@ impl<P, V> RadixTrie<P, V>
 where
     P: Path,
 {
+    /// Get value corresponding to `path` in the trie (or `None` if it does not
+    /// exist)
     pub fn get<Q>(&self, path: &Q) -> Option<&V>
     where
         Q: Borrow<P::Ref> + ?Sized,
@@ -63,12 +69,16 @@ where
         ret
     }
 
+    /// Insert `value` into the trie at `path`. Returns the old value, or
+    /// `None` if the value was newly inserted.
     pub fn insert(&mut self, path: P, value: V) -> Option<V> {
         let ret = self.insert_impl(path.borrow(), value);
         self.check_invariants(true);
         ret
     }
 
+    /// Remove the value at `path` from the trie and return it. `None` if the
+    /// value did not exist in the trie.
     pub fn remove<Q>(&mut self, path: &Q) -> Option<V>
     where
         Q: Borrow<P::Ref> + ?Sized,
@@ -90,10 +100,12 @@ where
         }
     }
 
+    /// Iterater over `(P, &mut V)` pairs that the trie contains.
     pub fn iter(&self) -> Iter<P, V> {
         Iter::new(self)
     }
 
+    /// Mutable iterater over `(P, &V)` pairs that the trie contains.
     pub fn iter_mut(&mut self) -> IterMut<P, V> {
         IterMut::new(self)
     }

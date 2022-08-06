@@ -1,5 +1,5 @@
 [package]
-name = "tries"
+name = "rusty_trees"
 version = "0.1.0"
 edition = "2021"
 

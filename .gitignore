@@ -1,2 +1,4 @@
 /target
 /.vscode
+/docs
+.DS_Store
