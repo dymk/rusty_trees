@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 use libfuzzer_sys::fuzz_target;
-use trees::radix_trie::RadixTrie;
+use rusty_trees::radix_trie::RadixTrie;
 
 macro_rules! check_same {
     ($trie:ident, $truth:ident, $name:expr, $($lambda:tt)*) => {

@@ -1,5 +1,5 @@
 [package]
-name = "trees-fuzz"
+name = "rusty_trees-fuzz"
 version = "0.0.0"
 authors = ["Automatically generated"]
 publish = false
@@ -10,8 +10,9 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+arbitrary = "1.1"
 
-[dependencies.trees]
+[dependencies.rusty_trees]
 path = ".."
 
 # Prevent this from interfering with workspaces
