@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+cd "$SCRIPT_DIR"
+
+set -ex
+
+fuzzer_tests_file=../src/radix_trie/fuzzer_tests.rs
+
+cat << EOF > $fuzzer_tests_file
+use std::collections::HashMap;
+
+use crate::radix_trie::RadixTrie;
+
+fn test_iterators(truth: HashMap<String, usize>, trie: RadixTrie<String, usize>) {
+    let mut actual = HashMap::new();
+    for (key, value) in trie.iter() {
+        if let Some(old_value) = actual.insert(key.clone(), *value) {
+            panic!(
+                "iterator gave duplicate key: {} / {} / {}",
+                key, value, old_value
+            );
+        }
+    }
+    if !actual.eq(&truth) {
+        panic!("iterators not equal: {:?} / {:?}", actual, truth);
+    }
+}
+
+EOF
+
+./fuzz build radix_trie --features=print_test_body
+radix_trie_bin=$(find target -name 'radix_trie')
+
+set +x
+
+idx=0
+for corpa in corpus/radix_trie/*
+do
+    printf "#[test]\n" >> $fuzzer_tests_file
+    printf "fn fuzzer_test_%s() {\n" $idx >> $fuzzer_tests_file
+
+    $radix_trie_bin "$corpa" 2>/dev/null >> $fuzzer_tests_file
+
+    printf "}\n" >> $fuzzer_tests_file
+    printf "\n" >> $fuzzer_tests_file
+    ((idx++))
+    printf "."
+done
+printf "Done!\n"
+cargo fmt --manifest-path=../Cargo.toml -- $fuzzer_tests_file

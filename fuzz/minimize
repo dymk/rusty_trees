@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+cd "$SCRIPT_DIR"
+
+set -ex
+
+./fuzz tmin radix_trie --runs=5 "$@"
+./fuzz run radix_trie --features=print_testcase "$@" 2>/dev/null

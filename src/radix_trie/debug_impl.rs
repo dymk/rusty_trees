@@ -22,7 +22,7 @@ where
         let ident_str: String = " ".repeat(ident);
         f.write_str(&format!("`{:?}`\n", trie.value))?;
         for node in &trie.nodes {
-            f.write_str(&format!("{}- {:?} ", ident_str, node.path))?;
+            f.write_str(&format!("{}- {:?} ", ident_str, node.key))?;
             RadixTrie::fmt_impl(ident + 2, &node.trie, f)?
         }
 
@@ -39,7 +39,7 @@ mod test {
         let trie: RadixTrie<String, i32> = RadixTrie {
             value: Some(5),
             nodes: vec![Node {
-                path: "foo".into(),
+                key: "foo".into(),
                 trie: RadixTrie::default(),
             }],
         };

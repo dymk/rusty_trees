@@ -3,11 +3,15 @@ use std::{borrow::Borrow, mem};
 mod debug_impl;
 pub mod iter;
 mod iter_mut;
-mod key_path;
-mod key_path_string_impl;
+mod key;
+pub mod key_string_impl;
+
+#[cfg(feature = "run_fuzzer_tests")]
+#[cfg(test)]
+mod fuzzer_tests;
 
 use self::{iter::Iter, iter_mut::IterMut};
-pub use key_path::{Path, PathRef};
+pub use key::{Key, KeyRef};
 
 /// Implementation of a Radix Trie (also known as a Radix Tree, or
 /// Compressed Prefix Trie).
@@ -19,13 +23,13 @@ pub struct RadixTrie<P, V> {
     // `check_leaf_node_some_invariant`).
     value: Option<V>,
 
-    // List of child nodes. The path of a node is computed by concatenating
-    // all the `path`s starting from the root node to this node.
+    // List of child nodes. The key of a node is computed by concatenating
+    // all the `key`s starting from the root node to this node.
     nodes: Vec<Node<P, V>>,
 }
 
 pub(self) struct Node<P, V> {
-    path: P,
+    key: P,
     trie: RadixTrie<P, V>,
 }
 
@@ -55,36 +59,36 @@ impl<P, V> Default for RadixTrie<P, V> {
 
 impl<P, V> RadixTrie<P, V>
 where
-    P: Path,
+    P: Key,
 {
-    /// Get value corresponding to `path` in the trie (or `None` if it does not
+    /// Get value corresponding to `key` in the trie (or `None` if it does not
     /// exist)
-    pub fn get<Q>(&self, path: &Q) -> Option<&V>
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
     where
         Q: Borrow<P::Ref> + ?Sized,
     {
-        let path: &P::Ref = path.borrow();
-        let ret = self.get_impl(path);
+        let key: &P::Ref = key.borrow();
+        let ret = self.get_impl(key);
         self.check_invariants(true);
         ret
     }
 
-    /// Insert `value` into the trie at `path`. Returns the old value, or
+    /// Insert `value` into the trie at `key`. Returns the old value, or
     /// `None` if the value was newly inserted.
-    pub fn insert(&mut self, path: P, value: V) -> Option<V> {
-        let ret = self.insert_impl(path.borrow(), value);
+    pub fn insert(&mut self, key: P, value: V) -> Option<V> {
+        let ret = self.insert_impl(key.borrow(), value);
         self.check_invariants(true);
         ret
     }
 
-    /// Remove the value at `path` from the trie and return it. `None` if the
+    /// Remove the value at `key` from the trie and return it. `None` if the
     /// value did not exist in the trie.
-    pub fn remove<Q>(&mut self, path: &Q) -> Option<V>
+    pub fn remove<Q>(&mut self, key: &Q) -> Option<V>
     where
         Q: Borrow<P::Ref> + ?Sized,
     {
-        let path: &P::Ref = path.borrow();
-        let ret = self.remove_impl(0, path);
+        let key: &P::Ref = key.borrow();
+        let ret = self.remove_impl(0, key);
         self.check_invariants(true);
         match ret {
             RemoveResult::Skip => None,
@@ -110,13 +114,13 @@ where
         IterMut::new(self)
     }
 
-    fn get_impl(&self, path: &P::Ref) -> Option<&V> {
-        if path.is_empty() {
+    fn get_impl(&self, key: &P::Ref) -> Option<&V> {
+        if key.is_empty() {
             return self.value.as_ref();
         }
 
         for node in &self.nodes {
-            let (prefix, node_rest, path_rest) = P::Ref::prefix(node.path.borrow(), path);
+            let (prefix, node_rest, key_rest) = P::Ref::prefix(node.key.borrow(), key);
             let (prefix_empty, node_rest_empty) = (prefix.is_empty(), node_rest.is_empty());
 
             // no prefix match, skip this node
@@ -125,56 +129,53 @@ where
             }
 
             if node_rest_empty {
-                // consumed the whole child path, delegate getting to the child
-                return node.trie.get_impl(path_rest);
+                // consumed the whole child key, delegate getting to the child
+                return node.trie.get_impl(key_rest);
             }
         }
 
         None
     }
 
-    fn insert_impl<'a>(&'a mut self, path: &'a P::Ref, value: V) -> Option<V> {
-        // path is empty, this is the exact node being targeted, insert here
-        if path.is_empty() {
+    fn insert_impl<'a>(&'a mut self, key: &'a P::Ref, value: V) -> Option<V> {
+        // key is empty, this is the exact node being targeted, insert here
+        if key.is_empty() {
             return self.value.replace(value);
         }
 
         for node in &mut self.nodes {
-            let (prefix, node_rest, path_rest) = P::Ref::prefix(node.path.borrow(), path);
-            let (prefix_empty, node_rest_empty, path_rest_empty) = (
-                prefix.is_empty(),
-                node_rest.is_empty(),
-                path_rest.is_empty(),
-            );
+            let (prefix, node_rest, key_rest) = P::Ref::prefix(node.key.borrow(), key);
+            let (prefix_empty, node_rest_empty, key_rest_empty) =
+                (prefix.is_empty(), node_rest.is_empty(), key_rest.is_empty());
 
             if prefix_empty {
                 // no common prefix, skip this node
                 continue;
             }
 
-            match (node_rest_empty, path_rest_empty) {
+            match (node_rest_empty, key_rest_empty) {
                 // found exact target node
                 (true, true) => {
-                    return node.trie.insert_impl(path_rest, value);
+                    return node.trie.insert_impl(key_rest, value);
                 }
 
-                // stopped in an interior that does not yet exist, and want to go down another path
+                // stopped in an interior that does not yet exist, and want to go down another key
                 (false, false) => {
                     // create the new fork in the road
 
                     let interior_trie = RadixTrie::with_value_and_capacity(None, 2);
 
                     let left_fork = Node {
-                        path: node_rest.to_owned(),
+                        key: node_rest.to_owned(),
                         trie: mem::replace(&mut node.trie, interior_trie),
                     };
 
                     let right_fork = Node {
-                        path: path_rest.to_owned(),
+                        key: key_rest.to_owned(),
                         trie: RadixTrie::with_value(value),
                     };
 
-                    node.path = prefix.to_owned();
+                    node.key = prefix.to_owned();
                     node.trie.nodes.push(left_fork);
                     node.trie.nodes.push(right_fork);
 
@@ -185,41 +186,41 @@ where
                 (false, true) => {
                     // create the new interior node
                     let new_child_node = Node {
-                        path: node_rest.to_owned(),
+                        key: node_rest.to_owned(),
                         trie: mem::replace(
                             &mut node.trie,
                             RadixTrie::with_value_and_capacity(Some(value), 1),
                         ),
                     };
 
-                    node.path = prefix.to_owned();
+                    node.key = prefix.to_owned();
                     node.trie.nodes.push(new_child_node);
 
                     return None;
                 }
-                // no more of this child, but there is more path -
+                // no more of this child, but there is more key -
                 // recurse
                 (true, false) => {
-                    return node.trie.insert_impl(path_rest, value);
+                    return node.trie.insert_impl(key_rest, value);
                 }
             }
         }
 
         // no relevant existing child node found, insert as a new subnode
         self.nodes.push(Node {
-            path: path.to_owned(),
+            key: key.to_owned(),
             trie: RadixTrie::with_value(value),
         });
 
         None
     }
 
-    fn remove_impl(&mut self, this_idx: usize, path: &P::Ref) -> RemoveResult<V> {
-        // path empty => this is the exact node being removed.
+    fn remove_impl(&mut self, this_idx: usize, key: &P::Ref) -> RemoveResult<V> {
+        // key empty => this is the exact node being removed.
         // indicate to the caller that the value of this node has been moved
         // out, along with information about num_children so the parent can
         // decide if this node should be removed
-        if path.is_empty() {
+        if key.is_empty() {
             return RemoveResult::Done {
                 idx: this_idx,
                 num_children: self.nodes.len(),
@@ -232,7 +233,7 @@ where
         let mut result = RemoveResult::Skip;
 
         for (idx, node) in self.nodes.iter_mut().enumerate() {
-            let (prefix, node_rest, path_rest) = P::Ref::prefix(node.path.borrow(), path);
+            let (prefix, node_rest, key_rest) = P::Ref::prefix(node.key.borrow(), key);
             let (prefix_empty, node_rest_empty) = (prefix.is_empty(), node_rest.is_empty());
 
             if prefix_empty {
@@ -241,8 +242,8 @@ where
             }
 
             if node_rest_empty {
-                // node's path was entirely consumed, so go down this node path
-                result = node.trie.remove_impl(idx, path_rest);
+                // node's key was entirely consumed, so go down this node key
+                result = node.trie.remove_impl(idx, key_rest);
                 match result {
                     RemoveResult::Skip => continue,
                     _ => break,
@@ -264,10 +265,10 @@ where
                 }
                 (false, 1) => {
                     // remove the interior node and extend its lone child's
-                    // path
+                    // key
                     let mut node = self.nodes.swap_remove(idx);
                     let mut child = node.trie.nodes.pop().unwrap();
-                    child.path = node.path.concat(child.path);
+                    child.key = node.key.concat(child.key);
                     self.nodes.push(child);
                 }
                 _ => {
@@ -299,7 +300,7 @@ where
     fn check_invariants(&self, is_root: bool) {
         #[cfg(debug_assertions)]
         {
-            self.check_path_prefix_invariant();
+            self.check_key_prefix_invariant();
             self.check_leaf_node_some_invariant(is_root);
         }
     }
@@ -309,14 +310,14 @@ where
      * a single trie should share a common prefix - if they did, that indicates
      * we did not create an interior node of that common prefix.
      */
-    fn check_path_prefix_invariant(&self) {
+    fn check_key_prefix_invariant(&self) {
         for (idx1, n1) in self.nodes.iter().enumerate() {
             for (idx2, n2) in self.nodes.iter().enumerate() {
                 if idx1 == idx2 {
                     continue;
                 }
 
-                let (prefix, _, _) = P::Ref::prefix(n1.path.borrow(), n2.path.borrow());
+                let (prefix, _, _) = P::Ref::prefix(n1.key.borrow(), n2.key.borrow());
                 if !P::Ref::is_empty(prefix) {
                     panic!("no shared prefixes invariant failed");
                 }
@@ -324,7 +325,7 @@ where
         }
 
         for node in &self.nodes {
-            node.trie.check_path_prefix_invariant();
+            node.trie.check_key_prefix_invariant();
         }
     }
 
@@ -361,16 +362,16 @@ mod test {
         RadixTrie {
             value: None,
             nodes: vec![Node {
-                path: "do".into(),
+                key: "do".into(),
                 trie: RadixTrie {
                     value: None,
                     nodes: vec![
                         Node {
-                            path: "g".into(),
+                            key: "g".into(),
                             trie: RadixTrie::with_value(1),
                         },
                         Node {
-                            path: "ts".into(),
+                            key: "ts".into(),
                             trie: RadixTrie::with_value(2),
                         },
                     ],
@@ -471,5 +472,33 @@ mod test {
         assert_eq!(None, trie.insert("a".to_owned(), 1));
         assert_eq!(None, trie.insert("abc".to_owned(), 2));
         assert_eq!(Some(1), trie.remove("a"));
+    }
+
+    #[test]
+    fn test_fuzzer_7() {
+        let mut trie: RadixTrie<String, usize> = RadixTrie::new();
+        assert_eq!(None, trie.insert("Юa".to_owned(), 5859475934558632553));
+        assert_eq!(None, trie.insert("Юab".to_owned(), 0));
+    }
+
+    #[test]
+    fn fuzzer_test_8() {
+        let mut trie: RadixTrie<String, usize> = RadixTrie::new();
+        assert_eq!(None, trie.get(""));
+        assert_eq!(None, trie.get("\n"));
+        assert_eq!(None, trie.insert("ЮQQQQQ".to_owned(), 18446744073709551615));
+        assert_eq!(None, trie.remove("+{a\na\0\nr\u{11}:\0\0\0\0\0+"));
+        assert_eq!(
+            None,
+            trie.insert("ЮQQQQQQ+++".to_owned(), 5859552552105803775)
+        );
+        assert_eq!(None, trie.insert("".to_owned(), 1375731711));
+    }
+
+    #[test]
+    fn fuzzer_test_9() {
+        let mut trie: RadixTrie<String, usize> = RadixTrie::new();
+        assert_eq!(None, trie.insert("".to_owned(), 18446462603027808001));
+        assert_eq!(Some(18446462603027808001), trie.insert("".to_owned(), 0));
     }
 }

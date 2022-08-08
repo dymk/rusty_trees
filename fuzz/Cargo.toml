@@ -10,7 +10,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-arbitrary = "1.1"
+arbitrary = { version = "1", features = ["derive"] }
 
 [dependencies.rusty_trees]
 path = ".."
@@ -24,3 +24,6 @@ name = "radix_trie"
 path = "fuzz_targets/radix_trie.rs"
 test = false
 doc = false
+
+[features]
+print_test_body = []

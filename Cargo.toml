@@ -7,3 +7,6 @@ edition = "2021"
 
 [dependencies]
 itertools = "*"
+
+[flags]
+run_fuzzer_tests = []
