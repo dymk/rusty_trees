@@ -2,3 +2,4 @@
 /.vscode
 /docs
 .DS_Store
+src/radix_trie/fuzzer_tests.rs
